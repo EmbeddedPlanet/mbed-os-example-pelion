@@ -25,6 +25,8 @@
 
 #include "mbed-trace/mbed_trace.h"             // Required for mbed_trace_*
 
+#include "icm20602_i2c.h"
+
 // Pointers to the resources that will be created in main_application().
 static MbedCloudClient *cloud_client;
 static bool cloud_client_running = true;
@@ -38,11 +40,22 @@ static M2MResource* m2m_put_res;
 static M2MResource* m2m_post_res;
 static M2MResource* m2m_deregister_res;
 static M2MResource* m2m_factory_reset_res;
+static M2MResource *m2m_icm20602_accelerometer_x_res;
+static M2MResource *m2m_icm20602_accelerometer_y_res;
+static M2MResource *m2m_icm20602_accelerometer_z_res;
+static M2MResource *m2m_icm20602_gyrometer_x_res;
+static M2MResource *m2m_icm20602_gyrometer_y_res;
+static M2MResource *m2m_icm20602_gyrometer_z_res;
 static SocketAddress sa;
 
 EventQueue queue(32 * EVENTS_EVENT_SIZE);
 Thread t;
 Mutex value_increment_mutex;
+
+DigitalOut sensor_power_enable(PIN_NAME_SENSOR_POWER_ENABLE);
+
+I2C i2c(PIN_NAME_SDA, PIN_NAME_SCL);
+ICM20602 icm20602(i2c);
 
 void print_client_ids(void)
 {
@@ -120,6 +133,40 @@ void update_progress(uint32_t progress, uint32_t total)
     printf("Update progress = %" PRIu8 "%%\n", percent);
 }
 
+float normalize_acceleration_value(int16_t acceleration_value)
+{
+    return acceleration_value * aRes;
+}
+
+float normalize_gyroscope_value(int16_t gyroscope_value)
+{
+    return gyroscope_value * gRes;
+}
+
+void update_resources(void)
+{
+    // Update accelerometer values
+    m2m_icm20602_accelerometer_x_res->set_value_float(normalize_acceleration_value(icm20602.getAccXvalue()));
+    m2m_icm20602_accelerometer_y_res->set_value_float(normalize_acceleration_value(icm20602.getAccYvalue()));
+    m2m_icm20602_accelerometer_z_res->set_value_float(normalize_acceleration_value(icm20602.getAccZvalue()));
+
+    // Update gyroscope values
+    m2m_icm20602_gyrometer_x_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrXvalue()));
+    m2m_icm20602_gyrometer_y_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrYvalue()));
+    m2m_icm20602_gyrometer_z_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrZvalue()));
+
+    printf("--------------------------------------------------------------------------------\n");
+
+    printf("ICM20602 Accelerometer X : %0.2f g\n", m2m_icm20602_accelerometer_x_res->get_value_float());
+    printf("ICM20602 Accelerometer Y : %0.2f g\n", m2m_icm20602_accelerometer_y_res->get_value_float());
+    printf("ICM20602 Accelerometer Z : %0.2f g\n", m2m_icm20602_accelerometer_z_res->get_value_float());
+    printf("ICM20602 Gyroscope X     : %0.2f dps\n", m2m_icm20602_gyrometer_x_res->get_value_float());
+    printf("ICM20602 Gyroscope Y     : %0.2f dps\n", m2m_icm20602_gyrometer_y_res->get_value_float());
+    printf("ICM20602 Gyroscope Z     : %0.2f dps\n", m2m_icm20602_gyrometer_z_res->get_value_float());
+
+    printf("--------------------------------------------------------------------------------\n\n");
+}
+
 void flush_stdin_buffer(void)
 {
     FileHandle *debug_console = mbed::mbed_file_handle(STDIN_FILENO);
@@ -182,6 +229,19 @@ int main(void)
         return -1;
     }
 
+    printf("Enable power to the sensors\n");
+    sensor_power_enable = 1;
+
+    // Sleep to give sensors time to come online
+    ThisThread::sleep_for(500);
+
+    if (icm20602.isOnline()) {
+        printf("ICM20602 online\n");
+        icm20602.init();
+    } else {
+        printf("ERROR: ICM20602 offline!\n");
+    }
+
     printf("Create resources\n");
     M2MObjectList m2m_obj_list;
 
@@ -215,6 +275,54 @@ int main(void)
         return -1;
     }
 
+    // GET resource 3313/0/5702 (Accelerometer X)
+    m2m_icm20602_accelerometer_x_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3313, 0, 5702, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_icm20602_accelerometer_x_res->set_observable(true);
+    if (m2m_icm20602_accelerometer_x_res->set_value_float(normalize_acceleration_value(icm20602.getAccXvalue())) != true) {
+        printf("m2m_icm20602_accelerometer_x_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3313/0/5703 (Accelerometer Y)
+    m2m_icm20602_accelerometer_y_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3313, 0, 5703, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_icm20602_accelerometer_y_res->set_observable(true);
+    if (m2m_icm20602_accelerometer_y_res->set_value_float(normalize_acceleration_value(icm20602.getAccYvalue())) != true) {
+        printf("m2m_icm20602_accelerometer_y_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3313/0/5704 (Accelerometer Z)
+    m2m_icm20602_accelerometer_z_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3313, 0, 5704, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_icm20602_accelerometer_z_res->set_observable(true);
+    if (m2m_icm20602_accelerometer_z_res->set_value_float(normalize_acceleration_value(icm20602.getAccZvalue())) != true) {
+        printf("m2m_icm20602_accelerometer_z_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3334/0/5702 (Gyrometer X)
+    m2m_icm20602_gyrometer_x_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3334, 0, 5702, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_icm20602_gyrometer_x_res->set_observable(true);
+    if (m2m_icm20602_gyrometer_x_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrXvalue())) != true) {
+        printf("m2m_icm20602_gyrometer_x_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3334/0/5703 (Gyrometer Y)
+    m2m_icm20602_gyrometer_y_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3334, 0, 5703, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_icm20602_gyrometer_y_res->set_observable(true);
+    if (m2m_icm20602_gyrometer_y_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrYvalue())) != true) {
+        printf("m2m_icm20602_gyrometer_y_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3334/0/5704 (Gyrometer Z)
+    m2m_icm20602_gyrometer_z_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3334, 0, 5704, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_icm20602_gyrometer_z_res->set_observable(true);
+    if (m2m_icm20602_gyrometer_z_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrZvalue())) != true) {
+        printf("m2m_icm20602_gyrometer_z_res->set_value_float() failed\n");
+        return -1;
+    }
+
     // POST resource 5000/0/1 to trigger deregister.
     m2m_deregister_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 5000, 0, 1, M2MResourceInstance::INTEGER, M2MBase::POST_ALLOWED);
 
@@ -244,7 +352,7 @@ int main(void)
     cloud_client->setup(network); // cloud_client->setup(NULL); -- https://jira.arm.com/browse/IOTCLT-3114
 
     t.start(callback(&queue, &EventQueue::dispatch_forever));
-    queue.call_every(5000, value_increment);
+    queue.call_every(5000, update_resources);
 
     // Flush the stdin buffer before reading from it
     flush_stdin_buffer();
