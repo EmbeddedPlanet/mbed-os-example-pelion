@@ -26,6 +26,7 @@
 #include "mbed-trace/mbed_trace.h"             // Required for mbed_trace_*
 
 #include "icm20602_i2c.h"
+#include "BME680_BSEC.h"
 
 // Pointers to the resources that will be created in main_application().
 static MbedCloudClient *cloud_client;
@@ -46,6 +47,14 @@ static M2MResource *m2m_icm20602_accelerometer_z_res;
 static M2MResource *m2m_icm20602_gyrometer_x_res;
 static M2MResource *m2m_icm20602_gyrometer_y_res;
 static M2MResource *m2m_icm20602_gyrometer_z_res;
+static M2MResource *m2m_bme680_temperature_res;
+static M2MResource *m2m_bme680_humidity_res;
+static M2MResource *m2m_bme680_pressure_res;
+static M2MResource *m2m_bme680_gas_resistance_res;
+static M2MResource *m2m_bme680_co2_equivalent_res;
+static M2MResource *m2m_bme680_breath_voc_equivalent_res;
+static M2MResource *m2m_bme680_iaq_score_res;
+static M2MResource *m2m_bme680_iaq_accuracy_res;
 static SocketAddress sa;
 
 EventQueue queue(32 * EVENTS_EVENT_SIZE);
@@ -56,6 +65,7 @@ DigitalOut sensor_power_enable(PIN_NAME_SENSOR_POWER_ENABLE);
 
 I2C i2c(PIN_NAME_SDA, PIN_NAME_SCL);
 ICM20602 icm20602(i2c);
+BME680_BSEC *bme680 = BME680_BSEC::get_instance();
 
 void print_client_ids(void)
 {
@@ -145,24 +155,72 @@ float normalize_gyroscope_value(int16_t gyroscope_value)
 
 void update_resources(void)
 {
-    // Update accelerometer values
+    // Update ICM20602 values
     m2m_icm20602_accelerometer_x_res->set_value_float(normalize_acceleration_value(icm20602.getAccXvalue()));
     m2m_icm20602_accelerometer_y_res->set_value_float(normalize_acceleration_value(icm20602.getAccYvalue()));
     m2m_icm20602_accelerometer_z_res->set_value_float(normalize_acceleration_value(icm20602.getAccZvalue()));
-
-    // Update gyroscope values
     m2m_icm20602_gyrometer_x_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrXvalue()));
     m2m_icm20602_gyrometer_y_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrYvalue()));
     m2m_icm20602_gyrometer_z_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrZvalue()));
 
+    // Update BME680 values
+    m2m_bme680_temperature_res->set_value_float(bme680->get_temperature());
+    m2m_bme680_humidity_res->set_value_float(bme680->get_humidity());
+    m2m_bme680_pressure_res->set_value_float(bme680->get_pressure() / 1000.0);
+    m2m_bme680_gas_resistance_res->set_value_float(bme680->get_gas_resistance() / 1000.0);
+    m2m_bme680_co2_equivalent_res->set_value_float(bme680->get_co2_equivalent());
+    m2m_bme680_breath_voc_equivalent_res->set_value_float(bme680->get_breath_voc_equivalent());
+    m2m_bme680_iaq_score_res->set_value_float(bme680->get_iaq_score());
+    m2m_bme680_iaq_accuracy_res->set_value(bme680->get_iaq_accuracy());
+
     printf("--------------------------------------------------------------------------------\n");
 
-    printf("ICM20602 Accelerometer X : %0.2f g\n", m2m_icm20602_accelerometer_x_res->get_value_float());
-    printf("ICM20602 Accelerometer Y : %0.2f g\n", m2m_icm20602_accelerometer_y_res->get_value_float());
-    printf("ICM20602 Accelerometer Z : %0.2f g\n", m2m_icm20602_accelerometer_z_res->get_value_float());
-    printf("ICM20602 Gyroscope X     : %0.2f dps\n", m2m_icm20602_gyrometer_x_res->get_value_float());
-    printf("ICM20602 Gyroscope Y     : %0.2f dps\n", m2m_icm20602_gyrometer_y_res->get_value_float());
-    printf("ICM20602 Gyroscope Z     : %0.2f dps\n", m2m_icm20602_gyrometer_z_res->get_value_float());
+    printf("- ICM20602 Accelerometer X (3304/0/5702)        : %0.2f g\n", m2m_icm20602_accelerometer_x_res->get_value_float());
+    printf("- ICM20602 Accelerometer Y (3304/0/5703)        : %0.2f g\n", m2m_icm20602_accelerometer_y_res->get_value_float());
+    printf("- ICM20602 Accelerometer Z (3304/0/5704)        : %0.2f g\n", m2m_icm20602_accelerometer_z_res->get_value_float());
+    printf("- ICM20602 Gyroscope X (3334/0/5702)            : %0.2f dps\n", m2m_icm20602_gyrometer_x_res->get_value_float());
+    printf("- ICM20602 Gyroscope Y (3334/0/5703)            : %0.2f dps\n", m2m_icm20602_gyrometer_y_res->get_value_float());
+    printf("- ICM20602 Gyroscope Z (3334/0/5704)            : %0.2f dps\n", m2m_icm20602_gyrometer_z_res->get_value_float());
+    printf("- BME680 Temperature (3303/1/5700)              : %0.2f degC\n", m2m_bme680_temperature_res->get_value_float());
+    printf("- BME680 Relative Humidity (3304/1/5700)        : %0.2f %%RH\n", m2m_bme680_humidity_res->get_value_float());
+    printf("- BME680 Pressure (3315/0/5700)                 : %0.2f kPa\n", m2m_bme680_pressure_res->get_value_float());
+    printf("- BME680 Gas Resistance (26243/0/26248)         : %0.2f kOhms\n", m2m_bme680_gas_resistance_res->get_value_float());
+    printf("- BME680 CO2 Equivalents (26243/0/26250)        : %0.2f ppm\n", m2m_bme680_co2_equivalent_res->get_value_float());
+    printf("- BME680 Breath-VOC Equivalents (26243/0/26251) : %0.2f ppm\n", m2m_bme680_breath_voc_equivalent_res->get_value_float());
+    if (m2m_bme680_iaq_score_res->get_value_float() < 51.0) {
+        // Good
+        printf("- BME680 IAQ Score (26243/0/26252)              : %0.2f (Good)\n", m2m_bme680_iaq_score_res->get_value_float());
+    } else if (m2m_bme680_iaq_score_res->get_value_float() >= 51.0 && m2m_bme680_iaq_score_res->get_value_float() < 101.0 ) {
+        // Average
+        printf("- BME680 IAQ Score (26243/0/26252)              : %0.2f (Average)\n", m2m_bme680_iaq_score_res->get_value_float());
+    } else if (m2m_bme680_iaq_score_res->get_value_float() >= 101.0 && m2m_bme680_iaq_score_res->get_value_float() < 151.0 ) {
+        // Little bad
+        printf("- BME680 IAQ Score (26243/0/26252)              : %0.2f (Little bad)\n", m2m_bme680_iaq_score_res->get_value_float());
+    } else if (m2m_bme680_iaq_score_res->get_value_float() >= 151.0 && m2m_bme680_iaq_score_res->get_value_float() < 201.0 ) {
+        // Bad
+        printf("- BME680 IAQ Score (26243/0/26252)              : %0.2f (Bad)\n", m2m_bme680_iaq_score_res->get_value_float());
+    } else if (m2m_bme680_iaq_score_res->get_value_float() >= 201.0 && m2m_bme680_iaq_score_res->get_value_float() < 301.0 ) {
+        // Worse
+        printf("- BME680 IAQ Score (26243/0/26252)              : %0.2f (Worse)\n", m2m_bme680_iaq_score_res->get_value_float());
+    } else {
+        // Very bad
+        printf("- BME680 IAQ Score (26243/0/26252)              : %0.2f (Very bad)\n", m2m_bme680_iaq_score_res->get_value_float());
+    }
+    switch (m2m_bme680_iaq_accuracy_res->get_value_int()) {
+        default:
+        case 0:
+            printf("- BME680 IAQ Accuracy (26243/0/26253)           : 0 (Unreliable)\n");
+            break;
+        case 1:
+            printf("- BME680 IAQ Accuracy (26243/0/26253)           : 1 (Low accuracy)\n");
+            break;
+        case 2:
+            printf("- BME680 IAQ Accuracy (26243/0/26253)           : 2 (Medium accuracy)\n");
+            break;
+        case 3:
+            printf("- BME680 IAQ Accuracy (26243/0/26253)           : 3 (High accuracy)\n");
+            break;
+    }
 
     printf("--------------------------------------------------------------------------------\n\n");
 }
@@ -240,6 +298,12 @@ int main(void)
         icm20602.init();
     } else {
         printf("ERROR: ICM20602 offline!\n");
+    }
+
+    if (bme680->init(&i2c)) {
+        printf("BME680 online\n");
+    } else {
+        printf("ERROR: BME680 offline!\n");
     }
 
     printf("Create resources\n");
@@ -323,6 +387,70 @@ int main(void)
         return -1;
     }
 
+    // GET resource 3303/1/5700 (Temperature)
+    m2m_bme680_temperature_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3303, 1, 5700, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_bme680_temperature_res->set_observable(true);
+    if (m2m_bme680_temperature_res->set_value_float(bme680->get_temperature()) != true) {
+        printf("m2m_bme680_temperature_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3304/1/5700 (Humidity)
+    m2m_bme680_humidity_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3304, 1, 5700, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_bme680_humidity_res->set_observable(true);
+    if (m2m_bme680_humidity_res->set_value_float(bme680->get_humidity()) != true) {
+        printf("m2m_bme680_humidity_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3315/0/5700 (Pressure)
+    m2m_bme680_pressure_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3315, 0, 5700, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_bme680_pressure_res->set_observable(true);
+    if (m2m_bme680_pressure_res->set_value_float(bme680->get_pressure() / 1000.0) != true) {
+        printf("m2m_bme680_pressure_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 26243/0/26248 (Gas Resistance)
+    m2m_bme680_gas_resistance_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 26243, 0, 26248, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_bme680_gas_resistance_res->set_observable(true);
+    if (m2m_bme680_gas_resistance_res->set_value_float(bme680->get_gas_resistance() / 1000.0) != true) {
+        printf("m2m_bme680_gas_resistance_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 26243/0/26250 (CO2 Equivalents)
+    m2m_bme680_co2_equivalent_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 26243, 0, 26250, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_bme680_co2_equivalent_res->set_observable(true);
+    if (m2m_bme680_co2_equivalent_res->set_value_float(bme680->get_co2_equivalent()) != true) {
+        printf("m2m_bme680_co2_equivalent_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 26243/0/26251 (Breath-VOC Equivalents)
+    m2m_bme680_breath_voc_equivalent_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 26243, 0, 26251, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_bme680_breath_voc_equivalent_res->set_observable(true);
+    if (m2m_bme680_breath_voc_equivalent_res->set_value_float(bme680->get_breath_voc_equivalent()) != true) {
+        printf("m2m_bme680_breath_voc_equivalent_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 26243/0/26252 (IAQ Score)
+    m2m_bme680_iaq_score_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 26243, 0, 26252, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_bme680_iaq_score_res->set_observable(true);
+    if (m2m_bme680_iaq_score_res->set_value_float(bme680->get_iaq_score()) != true) {
+        printf("m2m_bme680_iaq_score_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 26243/0/26253 (IAQ Accuracy)
+    m2m_bme680_iaq_accuracy_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 26243, 0, 26253, M2MResourceInstance::INTEGER, M2MBase::GET_ALLOWED);
+    m2m_bme680_iaq_accuracy_res->set_observable(true);
+    if (m2m_bme680_iaq_accuracy_res->set_value(bme680->get_iaq_accuracy()) != true) {
+        printf("m2m_bme680_iaq_accuracy_res->set_value() failed\n");
+        return -1;
+    }
+
     // POST resource 5000/0/1 to trigger deregister.
     m2m_deregister_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 5000, 0, 1, M2MResourceInstance::INTEGER, M2MBase::POST_ALLOWED);
 
@@ -352,7 +480,7 @@ int main(void)
     cloud_client->setup(network); // cloud_client->setup(NULL); -- https://jira.arm.com/browse/IOTCLT-3114
 
     t.start(callback(&queue, &EventQueue::dispatch_forever));
-    queue.call_every(5000, update_resources);
+    queue.call_every(30000, update_resources);
 
     // Flush the stdin buffer before reading from it
     flush_stdin_buffer();
