@@ -25,6 +25,7 @@
 
 #include "mbed-trace/mbed_trace.h"             // Required for mbed_trace_*
 
+#include "LSM9DS1.h"
 #include "icm20602_i2c.h"
 #include "Si7021.h"
 #include "BME680_BSEC.h"
@@ -42,6 +43,15 @@ static M2MResource* m2m_put_res;
 static M2MResource* m2m_post_res;
 static M2MResource* m2m_deregister_res;
 static M2MResource* m2m_factory_reset_res;
+static M2MResource *m2m_lsm9ds1_accelerometer_x_res;
+static M2MResource *m2m_lsm9ds1_accelerometer_y_res;
+static M2MResource *m2m_lsm9ds1_accelerometer_z_res;
+static M2MResource *m2m_lsm9ds1_gyrometer_x_res;
+static M2MResource *m2m_lsm9ds1_gyrometer_y_res;
+static M2MResource *m2m_lsm9ds1_gyrometer_z_res;
+static M2MResource *m2m_lsm9ds1_magnetometer_x_res;
+static M2MResource *m2m_lsm9ds1_magnetometer_y_res;
+static M2MResource *m2m_lsm9ds1_magnetometer_z_res;
 static M2MResource *m2m_icm20602_accelerometer_x_res;
 static M2MResource *m2m_icm20602_accelerometer_y_res;
 static M2MResource *m2m_icm20602_accelerometer_z_res;
@@ -67,6 +77,10 @@ Mutex value_increment_mutex;
 DigitalOut sensor_power_enable(PIN_NAME_SENSOR_POWER_ENABLE);
 
 I2C i2c(PIN_NAME_SDA, PIN_NAME_SCL);
+
+static const uint8_t LSM9DS1_ACCEL_GYRO_ADDRESS = 0x6A << 1;
+static const uint8_t LSM9DS1_MAG_ADDRESS = 0x1C << 1;
+LSM9DS1 lsm9ds1(i2c, LSM9DS1_ACCEL_GYRO_ADDRESS, LSM9DS1_MAG_ADDRESS);
 ICM20602 icm20602(i2c);
 Si7021 si7021(i2c);
 BME680_BSEC *bme680 = BME680_BSEC::get_instance();
@@ -159,6 +173,20 @@ float normalize_gyroscope_value(int16_t gyroscope_value)
 
 void update_resources(void)
 {
+    // Update LSM9DS1 values
+    lsm9ds1.readAccel();
+    lsm9ds1.readGyro();
+    lsm9ds1.readMag();
+    m2m_lsm9ds1_accelerometer_x_res->set_value_float(lsm9ds1.calcAccel(lsm9ds1.ax));
+    m2m_lsm9ds1_accelerometer_y_res->set_value_float(lsm9ds1.calcAccel(lsm9ds1.ay));
+    m2m_lsm9ds1_accelerometer_z_res->set_value_float(lsm9ds1.calcAccel(lsm9ds1.az));
+    m2m_lsm9ds1_gyrometer_x_res->set_value_float(lsm9ds1.calcGyro(lsm9ds1.gx));
+    m2m_lsm9ds1_gyrometer_y_res->set_value_float(lsm9ds1.calcGyro(lsm9ds1.gy));
+    m2m_lsm9ds1_gyrometer_z_res->set_value_float(lsm9ds1.calcGyro(lsm9ds1.gz));
+    m2m_lsm9ds1_magnetometer_x_res->set_value_float(lsm9ds1.calcMag(lsm9ds1.mx));
+    m2m_lsm9ds1_magnetometer_y_res->set_value_float(lsm9ds1.calcMag(lsm9ds1.my));
+    m2m_lsm9ds1_magnetometer_z_res->set_value_float(lsm9ds1.calcMag(lsm9ds1.mz));
+
     // Update ICM20602 values
     m2m_icm20602_accelerometer_x_res->set_value_float(normalize_acceleration_value(icm20602.getAccXvalue()));
     m2m_icm20602_accelerometer_y_res->set_value_float(normalize_acceleration_value(icm20602.getAccYvalue()));
@@ -184,12 +212,21 @@ void update_resources(void)
 
     printf("--------------------------------------------------------------------------------\n");
 
-    printf("- ICM20602 Accelerometer X (3304/0/5702)        : %0.2f g\n", m2m_icm20602_accelerometer_x_res->get_value_float());
-    printf("- ICM20602 Accelerometer Y (3304/0/5703)        : %0.2f g\n", m2m_icm20602_accelerometer_y_res->get_value_float());
-    printf("- ICM20602 Accelerometer Z (3304/0/5704)        : %0.2f g\n", m2m_icm20602_accelerometer_z_res->get_value_float());
-    printf("- ICM20602 Gyroscope X (3334/0/5702)            : %0.2f dps\n", m2m_icm20602_gyrometer_x_res->get_value_float());
-    printf("- ICM20602 Gyroscope Y (3334/0/5703)            : %0.2f dps\n", m2m_icm20602_gyrometer_y_res->get_value_float());
-    printf("- ICM20602 Gyroscope Z (3334/0/5704)            : %0.2f dps\n", m2m_icm20602_gyrometer_z_res->get_value_float());
+    printf("- LSM9DS1 Accelerometer X (3304/0/5702)         : %0.2f g\n", m2m_lsm9ds1_accelerometer_x_res->get_value_float());
+    printf("- LSM9DS1 Accelerometer Y (3304/0/5703)         : %0.2f g\n", m2m_lsm9ds1_accelerometer_y_res->get_value_float());
+    printf("- LSM9DS1 Accelerometer Z (3304/0/5704)         : %0.2f g\n", m2m_lsm9ds1_accelerometer_z_res->get_value_float());
+    printf("- LSM9DS1 Gyroscope X (3334/0/5702)             : %0.2f dps\n", m2m_lsm9ds1_gyrometer_x_res->get_value_float());
+    printf("- LSM9DS1 Gyroscope Y (3334/0/5703)             : %0.2f dps\n", m2m_lsm9ds1_gyrometer_y_res->get_value_float());
+    printf("- LSM9DS1 Gyroscope Z (3334/0/5704)             : %0.2f dps\n", m2m_lsm9ds1_gyrometer_z_res->get_value_float());
+    printf("- LSM9DS1 Magnetometer X (3314/0/5702)          : %0.2f gauss\n", m2m_lsm9ds1_magnetometer_x_res->get_value_float());
+    printf("- LSM9DS1 Magnetometer Y (3314/0/5703)          : %0.2f gauss\n", m2m_lsm9ds1_magnetometer_y_res->get_value_float());
+    printf("- LSM9DS1 Magnetometer Z (3314/0/5704)          : %0.2f gauss\n", m2m_lsm9ds1_magnetometer_z_res->get_value_float());
+    printf("- ICM20602 Accelerometer X (3304/1/5702)        : %0.2f g\n", m2m_icm20602_accelerometer_x_res->get_value_float());
+    printf("- ICM20602 Accelerometer Y (3304/1/5703)        : %0.2f g\n", m2m_icm20602_accelerometer_y_res->get_value_float());
+    printf("- ICM20602 Accelerometer Z (3304/1/5704)        : %0.2f g\n", m2m_icm20602_accelerometer_z_res->get_value_float());
+    printf("- ICM20602 Gyroscope X (3334/1/5702)            : %0.2f dps\n", m2m_icm20602_gyrometer_x_res->get_value_float());
+    printf("- ICM20602 Gyroscope Y (3334/1/5703)            : %0.2f dps\n", m2m_icm20602_gyrometer_y_res->get_value_float());
+    printf("- ICM20602 Gyroscope Z (3334/1/5704)            : %0.2f dps\n", m2m_icm20602_gyrometer_z_res->get_value_float());
     printf("- SI7021 Temperature (3303/0/5700)              : %0.2f degC\n", m2m_si7021_temperature_res->get_value_float());
     printf("- SI7021 Relative Humidity (3304/0/5700)        : %0.2f %%RH\n", m2m_si7021_humidity_res->get_value_float());
     printf("- BME680 Temperature (3303/1/5700)              : %0.2f degC\n", m2m_bme680_temperature_res->get_value_float());
@@ -304,6 +341,13 @@ int main(void)
     // Sleep to give sensors time to come online
     ThisThread::sleep_for(500);
 
+    if (lsm9ds1.begin()) {
+        printf("LSM9DS1 online\n");
+        lsm9ds1.calibrate();
+    } else {
+        printf("ERROR: LSM9DS1 offline!\n");
+    }
+
     if (icm20602.isOnline()) {
         printf("ICM20602 online\n");
         icm20602.init();
@@ -357,47 +401,122 @@ int main(void)
     }
 
     // GET resource 3313/0/5702 (Accelerometer X)
-    m2m_icm20602_accelerometer_x_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3313, 0, 5702, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    lsm9ds1.readAccel();
+    lsm9ds1.readGyro();
+    lsm9ds1.readMag();
+    m2m_lsm9ds1_accelerometer_x_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3313, 0, 5702, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_lsm9ds1_accelerometer_x_res->set_observable(true);
+    if (m2m_lsm9ds1_accelerometer_x_res->set_value_float(lsm9ds1.calcAccel(lsm9ds1.ax)) != true) {
+        printf("m2m_lsm9ds1_accelerometer_x_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3313/0/5703 (Accelerometer Y)
+    m2m_lsm9ds1_accelerometer_y_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3313, 0, 5703, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_lsm9ds1_accelerometer_y_res->set_observable(true);
+    if (m2m_lsm9ds1_accelerometer_y_res->set_value_float(lsm9ds1.calcAccel(lsm9ds1.ay)) != true) {
+        printf("m2m_lsm9ds1_accelerometer_y_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3313/0/5704 (Accelerometer Z)
+    m2m_lsm9ds1_accelerometer_z_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3313, 0, 5704, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_lsm9ds1_accelerometer_z_res->set_observable(true);
+    if (m2m_lsm9ds1_accelerometer_z_res->set_value_float(lsm9ds1.calcAccel(lsm9ds1.az)) != true) {
+        printf("m2m_lsm9ds1_accelerometer_z_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3334/0/5702 (Gyrometer X)
+    m2m_lsm9ds1_gyrometer_x_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3334, 0, 5702, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_lsm9ds1_gyrometer_x_res->set_observable(true);
+    if (m2m_lsm9ds1_gyrometer_x_res->set_value_float(lsm9ds1.calcGyro(lsm9ds1.gx)) != true) {
+        printf("m2m_lsm9ds1_gyrometer_x_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3334/0/5703 (Gyrometer Y)
+    m2m_lsm9ds1_gyrometer_y_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3334, 0, 5703, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_lsm9ds1_gyrometer_y_res->set_observable(true);
+    if (m2m_lsm9ds1_gyrometer_y_res->set_value_float(lsm9ds1.calcGyro(lsm9ds1.gy)) != true) {
+        printf("m2m_lsm9ds1_gyrometer_y_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3334/0/5704 (Gyrometer Z)
+    m2m_lsm9ds1_gyrometer_z_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3334, 0, 5704, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_lsm9ds1_gyrometer_z_res->set_observable(true);
+    if (m2m_lsm9ds1_gyrometer_z_res->set_value_float(lsm9ds1.calcGyro(lsm9ds1.gz)) != true) {
+        printf("m2m_lsm9ds1_gyrometer_z_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3314/0/5702 (Magnetometer X)
+    m2m_lsm9ds1_magnetometer_x_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3314, 0, 5702, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_lsm9ds1_magnetometer_x_res->set_observable(true);
+    if (m2m_lsm9ds1_magnetometer_x_res->set_value_float(lsm9ds1.calcMag(lsm9ds1.mx)) != true) {
+        printf("m2m_lsm9ds1_magnetometer_x_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3314/0/5703 (Magnetometer Y)
+    m2m_lsm9ds1_magnetometer_y_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3314, 0, 5703, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_lsm9ds1_magnetometer_y_res->set_observable(true);
+    if (m2m_lsm9ds1_magnetometer_y_res->set_value_float(lsm9ds1.calcMag(lsm9ds1.my)) != true) {
+        printf("m2m_lsm9ds1_magnetometer_y_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3314/0/5704 (Magnetometer Z)
+    m2m_lsm9ds1_magnetometer_z_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3314, 0, 5704, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_lsm9ds1_magnetometer_z_res->set_observable(true);
+    if (m2m_lsm9ds1_magnetometer_z_res->set_value_float(lsm9ds1.calcMag(lsm9ds1.mz)) != true) {
+        printf("m2m_lsm9ds1_magnetometer_z_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3313/1/5702 (Accelerometer X)
+    m2m_icm20602_accelerometer_x_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3313, 1, 5702, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
     m2m_icm20602_accelerometer_x_res->set_observable(true);
     if (m2m_icm20602_accelerometer_x_res->set_value_float(normalize_acceleration_value(icm20602.getAccXvalue())) != true) {
         printf("m2m_icm20602_accelerometer_x_res->set_value_float() failed\n");
         return -1;
     }
 
-    // GET resource 3313/0/5703 (Accelerometer Y)
-    m2m_icm20602_accelerometer_y_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3313, 0, 5703, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    // GET resource 3313/1/5703 (Accelerometer Y)
+    m2m_icm20602_accelerometer_y_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3313, 1, 5703, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
     m2m_icm20602_accelerometer_y_res->set_observable(true);
     if (m2m_icm20602_accelerometer_y_res->set_value_float(normalize_acceleration_value(icm20602.getAccYvalue())) != true) {
         printf("m2m_icm20602_accelerometer_y_res->set_value_float() failed\n");
         return -1;
     }
 
-    // GET resource 3313/0/5704 (Accelerometer Z)
-    m2m_icm20602_accelerometer_z_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3313, 0, 5704, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    // GET resource 3313/1/5704 (Accelerometer Z)
+    m2m_icm20602_accelerometer_z_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3313, 1, 5704, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
     m2m_icm20602_accelerometer_z_res->set_observable(true);
     if (m2m_icm20602_accelerometer_z_res->set_value_float(normalize_acceleration_value(icm20602.getAccZvalue())) != true) {
         printf("m2m_icm20602_accelerometer_z_res->set_value_float() failed\n");
         return -1;
     }
 
-    // GET resource 3334/0/5702 (Gyrometer X)
-    m2m_icm20602_gyrometer_x_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3334, 0, 5702, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    // GET resource 3334/1/5702 (Gyrometer X)
+    m2m_icm20602_gyrometer_x_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3334, 1, 5702, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
     m2m_icm20602_gyrometer_x_res->set_observable(true);
     if (m2m_icm20602_gyrometer_x_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrXvalue())) != true) {
         printf("m2m_icm20602_gyrometer_x_res->set_value_float() failed\n");
         return -1;
     }
 
-    // GET resource 3334/0/5703 (Gyrometer Y)
-    m2m_icm20602_gyrometer_y_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3334, 0, 5703, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    // GET resource 3334/1/5703 (Gyrometer Y)
+    m2m_icm20602_gyrometer_y_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3334, 1, 5703, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
     m2m_icm20602_gyrometer_y_res->set_observable(true);
     if (m2m_icm20602_gyrometer_y_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrYvalue())) != true) {
         printf("m2m_icm20602_gyrometer_y_res->set_value_float() failed\n");
         return -1;
     }
 
-    // GET resource 3334/0/5704 (Gyrometer Z)
-    m2m_icm20602_gyrometer_z_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3334, 0, 5704, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    // GET resource 3334/1/5704 (Gyrometer Z)
+    m2m_icm20602_gyrometer_z_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3334, 1, 5704, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
     m2m_icm20602_gyrometer_z_res->set_observable(true);
     if (m2m_icm20602_gyrometer_z_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrZvalue())) != true) {
         printf("m2m_icm20602_gyrometer_z_res->set_value_float() failed\n");
