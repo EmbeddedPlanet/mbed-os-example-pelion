@@ -70,6 +70,7 @@ static M2MResource *m2m_bme680_breath_voc_equivalent_res;
 static M2MResource *m2m_bme680_iaq_score_res;
 static M2MResource *m2m_bme680_iaq_accuracy_res;
 static M2MResource *m2m_vl53l0x_distance_res;
+static M2MResource *m2m_led_res;
 static SocketAddress sa;
 
 EventQueue queue(32 * EVENTS_EVENT_SIZE);
@@ -89,6 +90,8 @@ Si7021 si7021(i2c);
 BME680_BSEC *bme680 = BME680_BSEC::get_instance();
 static const uint8_t VL53L0X_ADDRESS = 0x52;
 VL53L0X vl53l0x(&devi2c, PIN_NAME_INT_LIGHT_TOF, VL53L0X_ADDRESS);
+
+DigitalOut status_led(PIN_NAME_LED_RED);
 
 void print_client_ids(void)
 {
@@ -297,6 +300,11 @@ void update_resources(void)
     }
 
     printf("--------------------------------------------------------------------------------\n\n");
+}
+
+void led_res_update(const char* /*object_name*/)
+{
+    status_led = ((int)m2m_led_res->get_value_int()) == 0 ? 1 : 0; // active low
 }
 
 void flush_stdin_buffer(void)
@@ -659,6 +667,19 @@ int main(void)
             break;
         default:
             break;
+    }
+
+    // GET/PUT resource 3311/0/5850 (LED)
+    m2m_led_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3311, 0, 5850, M2MResourceInstance::BOOLEAN, M2MBase::GET_PUT_ALLOWED);
+    m2m_led_res->set_observable(true);
+    if (m2m_led_res->set_value(status_led == 0) != true) { // active low
+        printf("m2m_led_res->set_value() failed\n");
+        return -1;
+    }
+
+    if (m2m_led_res->set_value_updated_function(led_res_update) != true) {
+        printf("m2m_led_res->set_value_updated_function() failed\n");
+        return -1;
     }
 
     // POST resource 5000/0/1 to trigger deregister.
