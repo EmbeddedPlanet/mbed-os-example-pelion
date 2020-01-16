@@ -29,6 +29,7 @@
 #include "icm20602_i2c.h"
 #include "Si7021.h"
 #include "BME680_BSEC.h"
+#include "VL53L0X.h"
 
 // Pointers to the resources that will be created in main_application().
 static MbedCloudClient *cloud_client;
@@ -68,6 +69,7 @@ static M2MResource *m2m_bme680_co2_equivalent_res;
 static M2MResource *m2m_bme680_breath_voc_equivalent_res;
 static M2MResource *m2m_bme680_iaq_score_res;
 static M2MResource *m2m_bme680_iaq_accuracy_res;
+static M2MResource *m2m_vl53l0x_distance_res;
 static SocketAddress sa;
 
 EventQueue queue(32 * EVENTS_EVENT_SIZE);
@@ -77,6 +79,7 @@ Mutex value_increment_mutex;
 DigitalOut sensor_power_enable(PIN_NAME_SENSOR_POWER_ENABLE);
 
 I2C i2c(PIN_NAME_SDA, PIN_NAME_SCL);
+DevI2C devi2c(PIN_NAME_SDA, PIN_NAME_SCL);
 
 static const uint8_t LSM9DS1_ACCEL_GYRO_ADDRESS = 0x6A << 1;
 static const uint8_t LSM9DS1_MAG_ADDRESS = 0x1C << 1;
@@ -84,6 +87,8 @@ LSM9DS1 lsm9ds1(i2c, LSM9DS1_ACCEL_GYRO_ADDRESS, LSM9DS1_MAG_ADDRESS);
 ICM20602 icm20602(i2c);
 Si7021 si7021(i2c);
 BME680_BSEC *bme680 = BME680_BSEC::get_instance();
+static const uint8_t VL53L0X_ADDRESS = 0x52;
+VL53L0X vl53l0x(&devi2c, PIN_NAME_INT_LIGHT_TOF, VL53L0X_ADDRESS);
 
 void print_client_ids(void)
 {
@@ -210,64 +215,85 @@ void update_resources(void)
     m2m_bme680_iaq_score_res->set_value_float(bme680->get_iaq_score());
     m2m_bme680_iaq_accuracy_res->set_value(bme680->get_iaq_accuracy());
 
+    // Update VL53L0X value
+    uint32_t distance;
+    VL53L0X_Error retcode = vl53l0x.get_distance(&distance);
+    switch (retcode) {
+        case VL53L0X_ERROR_NONE:
+            // Successful read
+            m2m_vl53l0x_distance_res->set_value_float(distance / 1000.0);
+            break;
+        case VL53L0X_ERROR_RANGE_ERROR:
+            // Range error, return -1
+            m2m_vl53l0x_distance_res->set_value_float(-1.0f);
+            break;
+        default:
+            break;
+    }
+
     printf("--------------------------------------------------------------------------------\n");
 
-    printf("- LSM9DS1 Accelerometer X (3304/0/5702)         : %0.2f g\n", m2m_lsm9ds1_accelerometer_x_res->get_value_float());
-    printf("- LSM9DS1 Accelerometer Y (3304/0/5703)         : %0.2f g\n", m2m_lsm9ds1_accelerometer_y_res->get_value_float());
-    printf("- LSM9DS1 Accelerometer Z (3304/0/5704)         : %0.2f g\n", m2m_lsm9ds1_accelerometer_z_res->get_value_float());
-    printf("- LSM9DS1 Gyroscope X (3334/0/5702)             : %0.2f dps\n", m2m_lsm9ds1_gyrometer_x_res->get_value_float());
-    printf("- LSM9DS1 Gyroscope Y (3334/0/5703)             : %0.2f dps\n", m2m_lsm9ds1_gyrometer_y_res->get_value_float());
-    printf("- LSM9DS1 Gyroscope Z (3334/0/5704)             : %0.2f dps\n", m2m_lsm9ds1_gyrometer_z_res->get_value_float());
-    printf("- LSM9DS1 Magnetometer X (3314/0/5702)          : %0.2f gauss\n", m2m_lsm9ds1_magnetometer_x_res->get_value_float());
-    printf("- LSM9DS1 Magnetometer Y (3314/0/5703)          : %0.2f gauss\n", m2m_lsm9ds1_magnetometer_y_res->get_value_float());
-    printf("- LSM9DS1 Magnetometer Z (3314/0/5704)          : %0.2f gauss\n", m2m_lsm9ds1_magnetometer_z_res->get_value_float());
-    printf("- ICM20602 Accelerometer X (3304/1/5702)        : %0.2f g\n", m2m_icm20602_accelerometer_x_res->get_value_float());
-    printf("- ICM20602 Accelerometer Y (3304/1/5703)        : %0.2f g\n", m2m_icm20602_accelerometer_y_res->get_value_float());
-    printf("- ICM20602 Accelerometer Z (3304/1/5704)        : %0.2f g\n", m2m_icm20602_accelerometer_z_res->get_value_float());
-    printf("- ICM20602 Gyroscope X (3334/1/5702)            : %0.2f dps\n", m2m_icm20602_gyrometer_x_res->get_value_float());
-    printf("- ICM20602 Gyroscope Y (3334/1/5703)            : %0.2f dps\n", m2m_icm20602_gyrometer_y_res->get_value_float());
-    printf("- ICM20602 Gyroscope Z (3334/1/5704)            : %0.2f dps\n", m2m_icm20602_gyrometer_z_res->get_value_float());
-    printf("- SI7021 Temperature (3303/0/5700)              : %0.2f degC\n", m2m_si7021_temperature_res->get_value_float());
-    printf("- SI7021 Relative Humidity (3304/0/5700)        : %0.2f %%RH\n", m2m_si7021_humidity_res->get_value_float());
-    printf("- BME680 Temperature (3303/1/5700)              : %0.2f degC\n", m2m_bme680_temperature_res->get_value_float());
-    printf("- BME680 Relative Humidity (3304/1/5700)        : %0.2f %%RH\n", m2m_bme680_humidity_res->get_value_float());
-    printf("- BME680 Pressure (3315/0/5700)                 : %0.2f kPa\n", m2m_bme680_pressure_res->get_value_float());
-    printf("- BME680 Gas Resistance (26243/0/26248)         : %0.2f kOhms\n", m2m_bme680_gas_resistance_res->get_value_float());
-    printf("- BME680 CO2 Equivalents (26243/0/26250)        : %0.2f ppm\n", m2m_bme680_co2_equivalent_res->get_value_float());
-    printf("- BME680 Breath-VOC Equivalents (26243/0/26251) : %0.2f ppm\n", m2m_bme680_breath_voc_equivalent_res->get_value_float());
+    printf("- LSM9DS1 Accelerometer X (3304/0/5702)                 : %0.2f g\n", m2m_lsm9ds1_accelerometer_x_res->get_value_float());
+    printf("- LSM9DS1 Accelerometer Y (3304/0/5703)                 : %0.2f g\n", m2m_lsm9ds1_accelerometer_y_res->get_value_float());
+    printf("- LSM9DS1 Accelerometer Z (3304/0/5704)                 : %0.2f g\n", m2m_lsm9ds1_accelerometer_z_res->get_value_float());
+    printf("- LSM9DS1 Gyroscope X (3334/0/5702)                     : %0.2f dps\n", m2m_lsm9ds1_gyrometer_x_res->get_value_float());
+    printf("- LSM9DS1 Gyroscope Y (3334/0/5703)                     : %0.2f dps\n", m2m_lsm9ds1_gyrometer_y_res->get_value_float());
+    printf("- LSM9DS1 Gyroscope Z (3334/0/5704)                     : %0.2f dps\n", m2m_lsm9ds1_gyrometer_z_res->get_value_float());
+    printf("- LSM9DS1 Magnetometer X (3314/0/5702)                  : %0.2f gauss\n", m2m_lsm9ds1_magnetometer_x_res->get_value_float());
+    printf("- LSM9DS1 Magnetometer Y (3314/0/5703)                  : %0.2f gauss\n", m2m_lsm9ds1_magnetometer_y_res->get_value_float());
+    printf("- LSM9DS1 Magnetometer Z (3314/0/5704)                  : %0.2f gauss\n", m2m_lsm9ds1_magnetometer_z_res->get_value_float());
+    printf("- ICM20602 Accelerometer X (3304/1/5702)                : %0.2f g\n", m2m_icm20602_accelerometer_x_res->get_value_float());
+    printf("- ICM20602 Accelerometer Y (3304/1/5703)                : %0.2f g\n", m2m_icm20602_accelerometer_y_res->get_value_float());
+    printf("- ICM20602 Accelerometer Z (3304/1/5704)                : %0.2f g\n", m2m_icm20602_accelerometer_z_res->get_value_float());
+    printf("- ICM20602 Gyroscope X (3334/1/5702)                    : %0.2f dps\n", m2m_icm20602_gyrometer_x_res->get_value_float());
+    printf("- ICM20602 Gyroscope Y (3334/1/5703)                    : %0.2f dps\n", m2m_icm20602_gyrometer_y_res->get_value_float());
+    printf("- ICM20602 Gyroscope Z (3334/1/5704)                    : %0.2f dps\n", m2m_icm20602_gyrometer_z_res->get_value_float());
+    printf("- SI7021 Temperature (3303/0/5700)                      : %0.2f degC\n", m2m_si7021_temperature_res->get_value_float());
+    printf("- SI7021 Relative Humidity (3304/0/5700)                : %0.2f %%RH\n", m2m_si7021_humidity_res->get_value_float());
+    printf("- BME680 Temperature (3303/1/5700)                      : %0.2f degC\n", m2m_bme680_temperature_res->get_value_float());
+    printf("- BME680 Relative Humidity (3304/1/5700)                : %0.2f %%RH\n", m2m_bme680_humidity_res->get_value_float());
+    printf("- BME680 Pressure (3315/0/5700)                         : %0.2f kPa\n", m2m_bme680_pressure_res->get_value_float());
+    printf("- BME680 Gas Resistance (26243/0/26248)                 : %0.2f kOhms\n", m2m_bme680_gas_resistance_res->get_value_float());
+    printf("- BME680 CO2 Equivalents (26243/0/26250)                : %0.2f ppm\n", m2m_bme680_co2_equivalent_res->get_value_float());
+    printf("- BME680 Breath-VOC Equivalents (26243/0/26251)         : %0.2f ppm\n", m2m_bme680_breath_voc_equivalent_res->get_value_float());
     if (m2m_bme680_iaq_score_res->get_value_float() < 51.0) {
         // Good
-        printf("- BME680 IAQ Score (26243/0/26252)              : %0.2f (Good)\n", m2m_bme680_iaq_score_res->get_value_float());
+        printf("- BME680 IAQ Score (26243/0/26252)                      : %0.2f (Good)\n", m2m_bme680_iaq_score_res->get_value_float());
     } else if (m2m_bme680_iaq_score_res->get_value_float() >= 51.0 && m2m_bme680_iaq_score_res->get_value_float() < 101.0 ) {
         // Average
-        printf("- BME680 IAQ Score (26243/0/26252)              : %0.2f (Average)\n", m2m_bme680_iaq_score_res->get_value_float());
+        printf("- BME680 IAQ Score (26243/0/26252)                      : %0.2f (Average)\n", m2m_bme680_iaq_score_res->get_value_float());
     } else if (m2m_bme680_iaq_score_res->get_value_float() >= 101.0 && m2m_bme680_iaq_score_res->get_value_float() < 151.0 ) {
         // Little bad
-        printf("- BME680 IAQ Score (26243/0/26252)              : %0.2f (Little bad)\n", m2m_bme680_iaq_score_res->get_value_float());
+        printf("- BME680 IAQ Score (26243/0/26252)                      : %0.2f (Little bad)\n", m2m_bme680_iaq_score_res->get_value_float());
     } else if (m2m_bme680_iaq_score_res->get_value_float() >= 151.0 && m2m_bme680_iaq_score_res->get_value_float() < 201.0 ) {
         // Bad
-        printf("- BME680 IAQ Score (26243/0/26252)              : %0.2f (Bad)\n", m2m_bme680_iaq_score_res->get_value_float());
+        printf("- BME680 IAQ Score (26243/0/26252)                      : %0.2f (Bad)\n", m2m_bme680_iaq_score_res->get_value_float());
     } else if (m2m_bme680_iaq_score_res->get_value_float() >= 201.0 && m2m_bme680_iaq_score_res->get_value_float() < 301.0 ) {
         // Worse
-        printf("- BME680 IAQ Score (26243/0/26252)              : %0.2f (Worse)\n", m2m_bme680_iaq_score_res->get_value_float());
+        printf("- BME680 IAQ Score (26243/0/26252)                      : %0.2f (Worse)\n", m2m_bme680_iaq_score_res->get_value_float());
     } else {
         // Very bad
-        printf("- BME680 IAQ Score (26243/0/26252)              : %0.2f (Very bad)\n", m2m_bme680_iaq_score_res->get_value_float());
+        printf("- BME680 IAQ Score (26243/0/26252)                      : %0.2f (Very bad)\n", m2m_bme680_iaq_score_res->get_value_float());
     }
     switch (m2m_bme680_iaq_accuracy_res->get_value_int()) {
         default:
         case 0:
-            printf("- BME680 IAQ Accuracy (26243/0/26253)           : 0 (Unreliable)\n");
+            printf("- BME680 IAQ Accuracy (26243/0/26253)                   : 0 (Unreliable)\n");
             break;
         case 1:
-            printf("- BME680 IAQ Accuracy (26243/0/26253)           : 1 (Low accuracy)\n");
+            printf("- BME680 IAQ Accuracy (26243/0/26253)                   : 1 (Low accuracy)\n");
             break;
         case 2:
-            printf("- BME680 IAQ Accuracy (26243/0/26253)           : 2 (Medium accuracy)\n");
+            printf("- BME680 IAQ Accuracy (26243/0/26253)                   : 2 (Medium accuracy)\n");
             break;
         case 3:
-            printf("- BME680 IAQ Accuracy (26243/0/26253)           : 3 (High accuracy)\n");
+            printf("- BME680 IAQ Accuracy (26243/0/26253)                   : 3 (High accuracy)\n");
             break;
+    }
+    if (m2m_vl53l0x_distance_res->get_value_float() >= 0) {
+        printf("- VL53L0X Ranging Time-of-Flight Distance (3330/0/5700) : %0.2f m\n", m2m_vl53l0x_distance_res->get_value_float());
+    } else {
+        printf("- VL53L0X Ranging Time-of-Flight Distance (3330/0/5700) : OUT OF RANGE\n");
     }
 
     printf("--------------------------------------------------------------------------------\n\n");
@@ -365,6 +391,13 @@ int main(void)
         printf("BME680 online\n");
     } else {
         printf("ERROR: BME680 offline!\n");
+    }
+
+    VL53L0X_Error retcode = vl53l0x.init_sensor(VL53L0X_ADDRESS);
+    if (retcode == VL53L0X_ERROR_NONE) {
+        printf("VL53L0X online\n");
+    } else {
+        printf("ERROR: VL53L0X offline!\n");
     }
 
     printf("Create resources\n");
@@ -602,6 +635,30 @@ int main(void)
     if (m2m_bme680_iaq_accuracy_res->set_value(bme680->get_iaq_accuracy()) != true) {
         printf("m2m_bme680_iaq_accuracy_res->set_value() failed\n");
         return -1;
+    }
+
+    // GET resource 3330/0/5700 (Ranging Time-of-Flight Distance)
+    uint32_t distance;
+    retcode = vl53l0x.get_distance(&distance);
+    m2m_vl53l0x_distance_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3330, 0, 5700, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_vl53l0x_distance_res->set_observable(true);
+    switch (retcode) {
+        case VL53L0X_ERROR_NONE:
+            // Successful read
+            if (m2m_vl53l0x_distance_res->set_value_float(distance / 1000.0) != true) {
+                printf("m2m_vl53l0x_distance_res->set_value_float() failed\n");
+                return -1;
+            }
+            break;
+        case VL53L0X_ERROR_RANGE_ERROR:
+            // Range error, return -1
+            if (m2m_vl53l0x_distance_res->set_value_float(-1.0f) != true) {
+                printf("m2m_vl53l0x_distance_res->set_value_float() failed\n");
+                return -1;
+            }
+            break;
+        default:
+            break;
     }
 
     // POST resource 5000/0/1 to trigger deregister.
