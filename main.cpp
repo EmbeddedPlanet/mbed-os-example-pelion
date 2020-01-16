@@ -26,6 +26,7 @@
 #include "mbed-trace/mbed_trace.h"             // Required for mbed_trace_*
 
 #include "icm20602_i2c.h"
+#include "Si7021.h"
 #include "BME680_BSEC.h"
 
 // Pointers to the resources that will be created in main_application().
@@ -47,6 +48,8 @@ static M2MResource *m2m_icm20602_accelerometer_z_res;
 static M2MResource *m2m_icm20602_gyrometer_x_res;
 static M2MResource *m2m_icm20602_gyrometer_y_res;
 static M2MResource *m2m_icm20602_gyrometer_z_res;
+static M2MResource *m2m_si7021_temperature_res;
+static M2MResource *m2m_si7021_humidity_res;
 static M2MResource *m2m_bme680_temperature_res;
 static M2MResource *m2m_bme680_humidity_res;
 static M2MResource *m2m_bme680_pressure_res;
@@ -65,6 +68,7 @@ DigitalOut sensor_power_enable(PIN_NAME_SENSOR_POWER_ENABLE);
 
 I2C i2c(PIN_NAME_SDA, PIN_NAME_SCL);
 ICM20602 icm20602(i2c);
+Si7021 si7021(i2c);
 BME680_BSEC *bme680 = BME680_BSEC::get_instance();
 
 void print_client_ids(void)
@@ -163,6 +167,11 @@ void update_resources(void)
     m2m_icm20602_gyrometer_y_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrYvalue()));
     m2m_icm20602_gyrometer_z_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrZvalue()));
 
+    // Update SI7021 values
+    si7021.measure();
+    m2m_si7021_temperature_res->set_value_float(si7021.get_temperature() / 1000.0);
+    m2m_si7021_humidity_res->set_value_float(si7021.get_humidity() / 1000.0);
+
     // Update BME680 values
     m2m_bme680_temperature_res->set_value_float(bme680->get_temperature());
     m2m_bme680_humidity_res->set_value_float(bme680->get_humidity());
@@ -181,6 +190,8 @@ void update_resources(void)
     printf("- ICM20602 Gyroscope X (3334/0/5702)            : %0.2f dps\n", m2m_icm20602_gyrometer_x_res->get_value_float());
     printf("- ICM20602 Gyroscope Y (3334/0/5703)            : %0.2f dps\n", m2m_icm20602_gyrometer_y_res->get_value_float());
     printf("- ICM20602 Gyroscope Z (3334/0/5704)            : %0.2f dps\n", m2m_icm20602_gyrometer_z_res->get_value_float());
+    printf("- SI7021 Temperature (3303/0/5700)              : %0.2f degC\n", m2m_si7021_temperature_res->get_value_float());
+    printf("- SI7021 Relative Humidity (3304/0/5700)        : %0.2f %%RH\n", m2m_si7021_humidity_res->get_value_float());
     printf("- BME680 Temperature (3303/1/5700)              : %0.2f degC\n", m2m_bme680_temperature_res->get_value_float());
     printf("- BME680 Relative Humidity (3304/1/5700)        : %0.2f %%RH\n", m2m_bme680_humidity_res->get_value_float());
     printf("- BME680 Pressure (3315/0/5700)                 : %0.2f kPa\n", m2m_bme680_pressure_res->get_value_float());
@@ -300,6 +311,12 @@ int main(void)
         printf("ERROR: ICM20602 offline!\n");
     }
 
+    if (si7021.check()) {
+        printf("SI7021 online\n");
+    } else {
+        printf("ERROR: SI7021 offline!\n");
+    }
+
     if (bme680->init(&i2c)) {
         printf("BME680 online\n");
     } else {
@@ -384,6 +401,23 @@ int main(void)
     m2m_icm20602_gyrometer_z_res->set_observable(true);
     if (m2m_icm20602_gyrometer_z_res->set_value_float(normalize_gyroscope_value(icm20602.getGyrZvalue())) != true) {
         printf("m2m_icm20602_gyrometer_z_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3303/0/5700 (Temperature)
+    si7021.measure();
+    m2m_si7021_temperature_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3303, 0, 5700, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_si7021_temperature_res->set_observable(true);
+    if (m2m_si7021_temperature_res->set_value_float(si7021.get_temperature() / 1000.0) != true) {
+        printf("m2m_si7021_temperature_res->set_value_float() failed\n");
+        return -1;
+    }
+
+    // GET resource 3304/0/5700 (Humidity)
+    m2m_si7021_humidity_res = M2MInterfaceFactory::create_resource(m2m_obj_list, 3304, 0, 5700, M2MResourceInstance::FLOAT, M2MBase::GET_ALLOWED);
+    m2m_si7021_humidity_res->set_observable(true);
+    if (m2m_si7021_humidity_res->set_value_float(si7021.get_humidity() / 1000.0) != true) {
+        printf("m2m_si7021_humidity_res->set_value_float() failed\n");
         return -1;
     }
 
