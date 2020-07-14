@@ -56,7 +56,8 @@
             "lwip.tcp-enabled"                          : true,
             "lwip.ethernet-enabled"                     : false,
             "lwip.mem-size"                             : 22000,
-            "nsapi.dns-response-wait-time"              : 30000
+            "nsapi.dns-response-wait-time"              : 30000,
+            "nsapi.default-cellular-apn"                : "\"j108.com.attz\""
         }
     },
     "config": {
