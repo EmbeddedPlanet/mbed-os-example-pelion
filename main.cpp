@@ -16,13 +16,14 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------
 #ifndef MBED_TEST_MODE
-#include "mbed.h"
-#include "kv_config.h"
 #include "mbed-cloud-client/MbedCloudClient.h" // Required for new MbedCloudClient()
 #include "factory_configurator_client.h"       // Required for fcc_* functions and FCC_* defines
 #include "m2mresource.h"                       // Required for M2MResource
 #include "key_config_manager.h"                // Required for kcm_factory_reset
 
+#include "mbed.h"
+#include "DeviceKey.h"
+#include "kv_config.h"
 #include "mbed-trace/mbed_trace.h"             // Required for mbed_trace_*
 
 #include "LSM9DS1.h"
@@ -35,9 +36,11 @@
 static MbedCloudClient *cloud_client;
 static bool cloud_client_running = true;
 static NetworkInterface *network = NULL;
+static int error_count = 0;
 
 // Fake entropy needed for non-TRNG boards. Suitable only for demo devices.
 const uint8_t MBED_CLOUD_DEV_ENTROPY[] = { 0xf6, 0xd6, 0xc0, 0x09, 0x9e, 0x6e, 0xf2, 0x37, 0xdc, 0x29, 0x88, 0xf1, 0x57, 0x32, 0x7d, 0xde, 0xac, 0xb3, 0x99, 0x8c, 0xb9, 0x11, 0x35, 0x18, 0xeb, 0x48, 0x29, 0x03, 0x6a, 0x94, 0x6d, 0xe8, 0x40, 0xc0, 0x28, 0xcc, 0xe4, 0x04, 0xc3, 0x1f, 0x4b, 0xc2, 0xe0, 0x68, 0xa0, 0x93, 0xe6, 0x3a };
+const int MAX_ERROR_COUNT = 5;
 
 static M2MResource* m2m_get_res;
 static M2MResource* m2m_put_res;
@@ -96,8 +99,8 @@ DigitalOut status_led(PIN_NAME_LED_RED);
 void print_client_ids(void)
 {
     printf("Account ID: %s\n", cloud_client->endpoint_info()->account_id.c_str());
-    printf("Endpoint name: %s\n", cloud_client->endpoint_info()->internal_endpoint_name.c_str());
-    printf("Device ID: %s\n\n", cloud_client->endpoint_info()->endpoint_name.c_str());
+    printf("Endpoint name: %s\n", cloud_client->endpoint_info()->endpoint_name.c_str());
+    printf("Device ID: %s\n\n", cloud_client->endpoint_info()->internal_endpoint_name.c_str());
 }
 
 void value_increment(void)
@@ -141,6 +144,13 @@ void client_registered(void)
 {
     printf("Client registered.\n");
     print_client_ids();
+    error_count = 0;
+}
+
+void client_registration_updated(void)
+{
+    printf("Client registration updated.\n");
+    error_count = 0;
 }
 
 void client_unregistered(void)
@@ -161,6 +171,15 @@ void factory_reset(void*)
 void client_error(int err)
 {
     printf("client_error(%d) -> %s\n", err, cloud_client->error_description());
+    if (err == MbedCloudClient::ConnectNetworkError ||
+        err == MbedCloudClient::ConnectDnsResolvingFailed ||
+        err == MbedCloudClient::ConnectSecureConnectionFailed) {
+        if(++error_count == MAX_ERROR_COUNT) {
+            printf("Max error count %d reached, rebooting.\n\n", MAX_ERROR_COUNT);
+            ThisThread::sleep_for(1*1000);
+            NVIC_SystemReset();
+	}
+    }
 }
 
 void update_progress(uint32_t progress, uint32_t total)
@@ -334,6 +353,12 @@ int main(void)
         return -1;
     }
 
+#if MBED_MAJOR_VERSION > 5
+    // Initialize root of trust
+    DeviceKey &devkey = DeviceKey::get_instance();
+    devkey.generate_root_of_trust();
+#endif
+
     // Connect with NetworkInterface
     printf("Connect to network\n");
     network = NetworkInterface::get_default_instance();
@@ -407,6 +432,15 @@ int main(void)
     } else {
         printf("ERROR: VL53L0X offline!\n");
     }
+
+#ifdef MBED_CLOUD_CLIENT_SUPPORT_UPDATE
+    cloud_client = new MbedCloudClient(client_registered, client_unregistered, client_error, NULL, update_progress);
+#else
+    cloud_client = new MbedCloudClient(client_registered, client_unregistered, client_error);
+#endif // MBED_CLOUD_CLIENT_SUPPORT_UPDATE
+
+    // Initialize client
+    cloud_client->init();
 
     printf("Create resources\n");
     M2MObjectList m2m_obj_list;
@@ -689,11 +723,11 @@ int main(void)
     m2m_deregister_res->set_delayed_response(true);
 
     if (m2m_deregister_res->set_execute_function(deregister) != true) {
-        printf("m2m_post_res->set_execute_function() failed\n");
+        printf("m2m_deregister_res->set_execute_function() failed\n");
         return -1;
     }
 
-    // optional Device resource for running factory reset for the device. Path of this resource will be: 3/0/6.
+    // optional Device resource for running factory reset for the device. Path of this resource will be: 3/0/5.
     m2m_factory_reset_res = M2MInterfaceFactory::create_device()->create_resource(M2MDevice::FactoryReset);
     if (m2m_factory_reset_res) {
         m2m_factory_reset_res->set_execute_function(factory_reset);
@@ -701,17 +735,16 @@ int main(void)
 
     printf("Register Pelion Device Management Client\n\n");
 
-#ifdef MBED_CLOUD_CLIENT_SUPPORT_UPDATE
-    cloud_client = new MbedCloudClient(client_registered, client_unregistered, client_error, NULL, update_progress);
-#else
-    cloud_client = new MbedCloudClient(client_registered, client_unregistered, client_error);
-#endif // MBED_CLOUD_CLIENT_SUPPORT_UPDATE
+    cloud_client->on_registration_updated(client_registration_updated);
 
     cloud_client->add_objects(m2m_obj_list);
-    cloud_client->setup(network); // cloud_client->setup(NULL); -- https://jira.arm.com/browse/IOTCLT-3114
+    cloud_client->setup(network);
 
     t.start(callback(&queue, &EventQueue::dispatch_forever));
     queue.call_every(30000, update_resources);
+
+    // Flush the stdin buffer before reading from it
+    flush_stdin_buffer();
 
     // Flush the stdin buffer before reading from it
     flush_stdin_buffer();

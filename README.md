@@ -1,9 +1,9 @@
 # Pelion Device Management Client example for Mbed OS
 
-This is an basic Device Management client example for Mbed OS with the following features:
-- Support for latest Mbed OS and Device Management Client releases.
-- Support for Developer mode provisioning.
-- Support for FW Update.
+This is a basic Device Management Client example for Mbed OS that supports:
+- The latest Mbed OS and Device Management Client releases.
+- Developer mode provisioning.
+- Firmware Update.
 
 There is a more advanced example of the client with support for multiple operating systems in [mbed-cloud-client-example](https://github.com/ARMmbed/mbed-cloud-client-example) repository. The underlying client library is the same for both. This Mbed OS only example is simpler as it only supports one OS with a limited set of demonstrated features. If you want to do development in Linux and Mbed OS at the same time - you should use the [mbed-cloud-client-example](https://github.com/ARMmbed/mbed-cloud-client-example).
 
@@ -13,20 +13,31 @@ There is a more advanced example of the client with support for multiple operati
 
 This table shows a list of boards that are supported.
 
-Board                          |  Connectivity     | Storage for credentials and FW candidate | Notes
-----------------------------------| ------------------| ------------------------| --------------
-`NXP K64F`                          | Ethernet          | Internal Flash          |
-`NXP K66F`                          | Ethernet          | Internal Flash          |
-`ST NUCLEO_F429ZI`                  | Ethernet          | Internal Flash          |
-`ST NUCLEO_F411RE`                  | Wi-Fi ESP8266     | SD card                 |
-`Ublox UBLOX_EVK_ODIN_W2`           | Wi-Fi             | SD card                 |
-`ST DISCO_L475VG_IOT01A`            | Wi-Fi             | QSPIF                   |
-`Ublox UBLOX_C030_U201`             | Cellular          | SD card                 | Build-only
-`Ublox UBLOX_C030_R412M`            | Cellular          | SD card                 | Build-only
-`Embedded Planet EP_AGORA`          | Cellular          | SPIF                    | Build-only
-`ST NUCLEO_H743ZI2`                 | Ethernet          | Internal Flash          | Build-only
-`ST NUCLEO_L4R5ZI`                  | Wi-Fi ESP8266     | Internal Flash          | Build-only
-`Nuvoton NUMAKER_IOT_M487`          | Wi-Fi ESP8266     | SD card (NUSD)          | Build-only
+Board                               |  Connectivity     | Storage for credentials and FW candidate | Notes
+------------------------------------| ------------------| ------------------------| --------------
+Cypress `CYTFM_064B0S2_4343W`       | Wi-Fi             | Internal flash for credentials + external flash for FW candidate | To use `mbed-os-example-pelion` with the `CYTFM_064B0S2_4343W` board, check out the `cytfm-064b0s2-4343w` branch and see [*Running PDMC example on the CYTFM_064B0S2_4343W*](../cytfm-064b0s2-4343w/TARGET_CYTFM_064B0S2_4343W/README.md).
+Cypress `CY8CPROTO-062-4343W`       | Wi-Fi             | QSPIF                   | Build-only
+Embedded Planet `EP_AGORA`          | Cellular          | SPIF                    | Build-only
+Nuvoton `NUMAKER_IOT_M263A`         | Wi-Fi ESP8266     | SD card (NUSD)          | Build-only
+Nuvoton `NUMAKER_IOT_M487`          | Wi-Fi ESP8266     | SD card (NUSD)          | Build-only
+Nuvoton `NUMAKER_PFM_M487`          | Ethernet          | SD card (NUSD)          | Build-only
+Nuvoton `NUMAKER_PFM_NUC472`        | Ethernet          | SD card (NUSD)          | Build-only
+NXP `K64F`                          | Ethernet          | Internal Flash          |
+NXP `K66F`                          | Ethernet          | Internal Flash          |
+Renesas `GR_LYCHEE`                 | Wi-Fi ESP32       | External Flash ([See security limitation of this board](https://os.mbed.com/platforms/Renesas-GR-LYCHEE/#security-limitation-of-this-platform)) | Build-only
+Renesas `RZ_A1H`                    | Ethernet          | External Flash ([See security limitation of this board](https://os.mbed.com/platforms/Renesas-GR-PEACH/#security-limitation-of-this-platform)) | Build-only
+Seeed `ARCH_MAX`                    | Ethernet          | SD card                 | Build-only
+Seeed `WIO_3G`                      | Cellular          | Internal Flash          | Build-only
+Seeed `WIO_BG96`                    | Cellular          | Internal Flash          | Build-only
+ST `DISCO_L475VG_IOT01A`            | Wi-Fi             | QSPIF                   | Build-only
+ST `DISCO_L496AG`                   | Cellular          | QSPIF                   | Build-only
+ST `NUCLEO_F411RE`                  | Wi-Fi ESP8266     | SD card                 | Build-only
+ST `NUCLEO_F429ZI`                  | Ethernet          | Internal Flash          | Build-only
+ST `NUCLEO_F767ZI`                  | Ethernet          | Internal Flash          | Build-only
+ST `NUCLEO_H743ZI2`                 | Ethernet          | Internal Flash          | Build-only
+ST `NUCLEO_L4R5ZI`                  | Wi-Fi ESP8266     | Internal Flash          | Build-only
+ST `DISCO_F746NG `                  | Ethernet          | QSPIF                   | Build-only
+Uhuru `UHURU_RAVEN`                 | Wi-Fi ESP32       | Internal Flash          | Build-only
 
 Build-only = This target is currently verified only via compilation, and is not verified at runtime.
 
@@ -40,13 +51,9 @@ This section is intended for developers to get started, import the example appli
 
   For instructions on installing and using Mbed CLI, please see our [documentation](https://os.mbed.com/docs/mbed-os/latest/tools/developing-mbed-cli.html).
 
-- Install the `CLOUD_SDK_API_KEY`
+- Generate your own access key. Pelion Device Management is available for any Mbed developer. Create a [free trial](https://os.mbed.com/pelion-free-tier).
 
-   `mbed config -G CLOUD_SDK_API_KEY ak_1MDE1...<snip>`
-
-   You should generate your own API key. Pelion Device Management is available for any Mbed developer. Create a [free trial](https://os.mbed.com/pelion-free-tier).
-
-   For instructions on how to generate your API key, please see our [documentation](https://cloud.mbed.com/docs/current/integrate-web-app/api-keys.html#generating-an-api-key).
+   For instructions on how to generate your access key, please see our [documentation](https://developer.pelion.com/docs/device-management/current/user-account/application-access-keys.html).
 
 ## Deploying
 
@@ -57,11 +64,37 @@ This repository is in the process of being updated and depends on few enhancemen
     cd mbed-os-example-pelion
     ```
 
-## Compiling
+## Preparing for build
 
+1. Configure Mbed CLI defaults:
+    ```
     mbed target K64F
     mbed toolchain GCC_ARM
-    mbed device-management init -d arm.com --model-name example-app --force -q
+    ```
+
+1. Download the developer certificates from the [Device Management Portal](https://portal.mbedcloud.com//):
+    1. Log in to the portal with your credentials.
+    1. Navigate to **Device identity** > **Certificates**.
+    1. Click **New certificate**.
+    1. Add a name and an optional description for the certificate, and click **Create certificate**.
+    1. Go to **Device identity** > **Certificates** again.
+    1. Click on your new certificate.
+    1. Click **Download developer C file** to download the file `mbed_cloud_dev_credentials.c`.
+
+1. Copy the `mbed_cloud_dev_credentials.c` file to the root folder of the example.
+
+1. Use `manifest-tool` python package to create an update-related configuration for your device:
+    1. Upgrade to `manifest-tool` >= `2.1.1`:
+        ```
+        pip install --upgrade manifest-tool
+        ```
+    1. Initialize the developer environment:
+        ```
+        manifest-dev-tool init --access-key <Device Management access key>
+        ```
+
+## Compiling
+
     mbed compile
 
 ## Program Flow
@@ -78,6 +111,32 @@ This repository is in the process of being updated and depends on few enhancemen
 Check the public tutorial for further information:
 
   [https://www.pelion.com/docs/device-management/current/connecting/mbed-os.html](https://www.pelion.com/docs/device-management/current/connecting/mbed-os.html)
+
+## Enabling logs
+
+Logging (or tracing) can be enabled by modifying the [`mbed_app.json`](https://github.com/ARMmbed/mbed-os-example-pelion/blob/master/mbed_app.json#L19) file.
+
+    ```
+            "mbed-trace.enable"                         : null,
+    ```
+By modifying that `null` to `1` and recompiling the application.
+
+Log level can be modified compile-time by defining `MBED_TRACE_MAX_LEVEL` -macro to `mbed_app.json`:
+
+   ```
+    "target.macros_add": [
+         "MBED_TRACE_MAX_LEVEL=TRACE_LEVEL_INFO",
+   ```
+
+Default level is `TRACE_LEVEL_DEBUG`, possible values are:
+* `TRACE_LEVEL_DEBUG` (largest amounts of logs)
+* `TRACE_LEVEL_INFO`
+* `TRACE_LEVEL_WARN` and
+* `TRACE_LEVEL_ERROR` (smallest amount of logs).
+
+Component level run-time control is also possible by setting log levels (by calling `mbed_trace_config_set()`) and inclusions/exclusions (by calling `mbed_trace_include_filters_set()` or mbed_trace_exclude_filters_set()`).
+
+For more details, see the [`mbed-trace`](https://github.com/ARMmbed/mbed-trace) library.
 
 ## Troubleshooting
 
@@ -301,13 +360,55 @@ Basic pelion features are required to work:
 This should be verified by executing the Pelion E2E python test library tests.
 
 - Install the prerequisites listed in the README of the [pelion-e2e-python-test-library](https://github.com/ARMmbed/pelion-e2e-python-test-library).
-- Configure your API-key as instructed in the same README.
+- Configure your access key as instructed in the same README.
 - Basic tests can be then executed as:
 
-    `pytest TESTS/pelion-e2e-python-test-library/tests/dev-client-tests.py`
+    `pytest TESTS/pelion-e2e-python-test-library/tests/dev-client-tests.py --update_bin=/home/user/mbed-os-example-pelion/mbed-os-example-pelion_update.bin`
 
-<span class="notes">**Note:** Future version will bring in also firmware update test as part of the minimum test set.</span>.
+## Contributing platform support
+
+The contribution of platform support to this repository is restricted to Arm Mbed Partners and Arm Engineering teams. If you’d like to add a custom or community-based platform, please fork this repository and add it into your own account.
+Expectations on contributions:
+
+-	No code changes in `main.cpp`.
+This is a minimal and generic application that’s expected to work on out of the box with all platforms listed in the documentation and [Pelion Quick-start](https://os.mbed.com/guides/connect-device-to-pelion/) guide.
+
+- No changes to the hash of `mbed-os.lib ` or `mbed-cloud-client.lib` files.
+The Mbed OS release used in this repository should be update-to-date but you can raise an issue to be updated by the maintainers.
+
+-	No extra files or `.mbedignore` with removal of Mbed OS code.
+You may need to fix issues and send a PR to [Mbed OS](https://github.com/ARMmbed/mbed-os) first.
+
+-	Configuration (required)
+     - `mbed_app.json` to add components or features. Please follow the guidelines in the porting section of the docs.
+
+-	Drivers (optional)
+     -	If required, drivers for networking or storage (non-default) can be added in the `drivers` folder using an external library (.lib). For example  `COMPONENT_MYDRIVER.lib` and enabling in `mbed_app.json`.
+
+-	Bootloader (required)
+     -	The configuration should be provided in either [mbed-bootloader](https://github.com/ARMmbed/mbed-bootloader) repository (as default configuration) or [bootloader](https://github.com/ARMmbed/mbed-os-example-pelion/tree/master/bootloader) folder in this repository (if non-default). Our recommendation is to contribute to the mbed-bootloader repository whenever possible. Please indicate where the bootloader configuration lives.
+     -	Binaries should be generated and contributed following the name conventions in the bootloader folder.
+
+-	Indication of platform support
+     -	Please update `README.md` file and add an entry to the list of supported boards.
+
+-	Test results and other information
+     -	Attach test logs for required toolchains as documented [here](https://os.mbed.com/docs/mbed-os/latest/tools/index.html)
+           - Greentea (Mbed OS tests, including integration tests).
+           - Pelion E2E tests based on pytest.
+     -	Mbed OS and Mbed-cloud-client version used during the tests.
+        Note contributions will be accepted only against versions available in the example at that time.
+
+-	Pull-requests are raised against the master branch. The Arm team makes releases regularly.
+
+-	Pelion-Ready. Indicate if a board is expected to be marked as Pelion-Ready and therefore be added to the Pelion Quick-start.
+
+- You agree that the configuration changes contributed are considered open source and Apache 2.0 licensed.
+
+-	Support of the platform is provided by Silicon Partners or Platform vendors for Mbed Enabled platforms. If using a non-default configuration, then Arm is responsible for its support.
+
+Note platforms will be tested regularly in the Arm CI system. Please discuss with your Arm contact and make hardware available as indicated in the Mbed Enabled requirements.
 
 # Known-issues
 
-Please review existing issues on github and report any problem you may see.
+Please review existing issues on [GitHub](https://github.com/ARMmbed/mbed-os-example-pelion/issues) and report any problem you may see.
